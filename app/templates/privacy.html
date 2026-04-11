@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy{% endblock %}
+{% block content %}
+<div class="legal-page">
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: April 11, 2026</p>
+
+    <h2>What We Collect</h2>
+    <p>When you use ResumeTailor, we collect:</p>
+    <ul>
+        <li><strong>Account information:</strong> Your email address and a securely hashed password.</li>
+        <li><strong>Resume data:</strong> The resume text and job descriptions you submit for tailoring. These are stored so you can access your history.</li>
+        <li><strong>Payment information:</strong> Processed securely by Stripe. We never see or store your full card number.</li>
+        <li><strong>Usage data:</strong> Basic analytics like how many tailors you've generated.</li>
+    </ul>
+
+    <h2>How We Use Your Data</h2>
+    <p>Your data is used solely to provide the resume tailoring service:</p>
+    <ul>
+        <li>Your resume and job descriptions are sent to our AI provider (Anthropic) for processing. They do not use your data for training.</li>
+        <li>Tailored results are stored in your account for your convenience.</li>
+        <li>Your email is used for account management and critical service communications only.</li>
+    </ul>
+
+    <h2>What We Don't Do</h2>
+    <ul>
+        <li>We do not sell your personal data to third parties.</li>
+        <li>We do not use your resume content for advertising or marketing.</li>
+        <li>We do not share your data with recruiters or employers.</li>
+        <li>We do not send marketing emails without your consent.</li>
+    </ul>
+
+    <h2>Data Storage & Security</h2>
+    <p>Your data is stored on secure, encrypted servers. Passwords are hashed using industry-standard algorithms (bcrypt via Werkzeug). All connections are encrypted via HTTPS.</p>
+
+    <h2>Data Retention</h2>
+    <p>Your tailored resumes and cover letters are stored as long as your account is active. You can export all your data or delete your account at any time from your Account Settings page.</p>
+
+    <h2>Your Rights</h2>
+    <p>You have the right to:</p>
+    <ul>
+        <li><strong>Access:</strong> Download all your data via Account Settings.</li>
+        <li><strong>Delete:</strong> Permanently delete your account and all associated data.</li>
+        <li><strong>Portability:</strong> Export your data in JSON format.</li>
+    </ul>
+
+    <h2>Cookies</h2>
+    <p>We use essential cookies only for maintaining your login session. We do not use tracking cookies or third-party analytics cookies.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about privacy? Email us at privacy@resumetailor.app</p>
+</div>
+{% endblock %}

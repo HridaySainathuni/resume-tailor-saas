@@ -1,4 +1,4 @@
-"""Page routes — landing, dashboard, etc."""
+"""Page routes — landing, dashboard, legal pages."""
 from flask import Blueprint, render_template
 from flask_login import current_user, login_required
 
@@ -16,3 +16,13 @@ def landing():
 @login_required
 def dashboard():
     return render_template("dashboard.html", user=current_user)
+
+
+@pages_bp.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+
+@pages_bp.route("/terms")
+def terms():
+    return render_template("terms.html")

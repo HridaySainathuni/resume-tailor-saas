@@ -2,11 +2,12 @@
 {% block title %}Login{% endblock %}
 {% block content %}
 <div class="auth-container">
-    <h2>Log In</h2>
+    <h2>Welcome Back</h2>
+    <p class="muted">Log in to access your tailored resumes.</p>
     <form method="POST" action="/auth/login">
         <div class="form-group">
             <label for="email">Email</label>
-            <input type="email" name="email" id="email" required>
+            <input type="email" name="email" id="email" required autofocus>
         </div>
         <div class="form-group">
             <label for="password">Password</label>
@@ -14,6 +15,7 @@
         </div>
         <button type="submit" class="btn btn-primary btn-block">Log In</button>
     </form>
+    <p class="auth-link"><a href="/auth/forgot-password">Forgot your password?</a></p>
     <p class="auth-link">Don't have an account? <a href="/auth/signup">Sign up free</a></p>
 </div>
 {% endblock %}

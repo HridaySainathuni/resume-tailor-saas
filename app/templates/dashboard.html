@@ -14,7 +14,14 @@
                     <button onclick="subscribe()" class="btn btn-sm btn-primary">Upgrade to Pro — $9/mo</button>
                 {% endif %}
             {% endif %}
+            <a href="/account" class="btn btn-sm btn-outline">Account</a>
         </div>
+    </div>
+
+    <!-- Tab switcher -->
+    <div class="tab-bar">
+        <button class="tab active" onclick="switchTab('resume')">Resume Tailor</button>
+        <button class="tab" onclick="switchTab('cover-letter')">Cover Letter</button>
     </div>
 
     <div class="tailor-form">
@@ -35,24 +42,39 @@
                 <textarea id="resume" rows="15" placeholder="Paste your current resume here..."></textarea>
             </div>
             <div class="form-group">
-                <label for="job_description">Job Description</label>
+                <label for="job_description">Job Description
+                    <button type="button" onclick="importFromUrl()" class="btn-inline" title="Import from URL">Import URL</button>
+                </label>
                 <textarea id="job_description" rows="15" placeholder="Paste the full job description here..."></textarea>
             </div>
         </div>
 
-        <button id="tailor-btn" onclick="tailorResume()" class="btn btn-primary btn-lg">
-            Tailor My Resume
-        </button>
+        <!-- Resume tailor button -->
+        <div id="resume-tab-actions">
+            <button id="tailor-btn" onclick="tailorResume()" class="btn btn-primary btn-lg">
+                Tailor My Resume
+            </button>
+        </div>
+
+        <!-- Cover letter button (hidden by default) -->
+        <div id="cover-letter-tab-actions" style="display:none;">
+            <button id="cover-letter-btn" onclick="generateCoverLetter()" class="btn btn-primary btn-lg">
+                Generate Cover Letter
+            </button>
+        </div>
     </div>
 
+    <!-- Resume result -->
     <div id="result-section" class="result-section" style="display:none;">
         <div class="result-header">
             <h3>Your Tailored Resume</h3>
             <div class="result-actions">
-                <button onclick="copyResult()" class="btn btn-outline btn-sm">Copy to Clipboard</button>
-                <button id="pdf-btn" onclick="downloadPdf()" class="btn btn-outline btn-sm" style="display:none;">Download PDF</button>
-                <button onclick="toggleCompare()" class="btn btn-outline btn-sm">Compare Original</button>
+                <button onclick="copyResult()" class="btn btn-outline btn-sm">Copy</button>
+                <button id="pdf-btn" onclick="downloadPdf()" class="btn btn-outline btn-sm" style="display:none;">PDF</button>
+                <button id="docx-btn" onclick="downloadDocx()" class="btn btn-outline btn-sm" style="display:none;">DOCX</button>
+                <button onclick="toggleCompare()" class="btn btn-outline btn-sm">Compare</button>
                 <button onclick="runAtsScore()" class="btn btn-outline btn-sm">ATS Score</button>
+                <button id="gen-cl-btn" onclick="switchTab('cover-letter'); generateCoverLetter();" class="btn btn-primary btn-sm">+ Cover Letter</button>
             </div>
         </div>
 
@@ -96,9 +118,36 @@
         <pre id="tailored-output"></pre>
     </div>
 
+    <!-- Cover letter result -->
+    <div id="cover-letter-section" class="result-section" style="display:none;">
+        <div class="result-header">
+            <h3>Your Cover Letter</h3>
+            <div class="result-actions">
+                <button onclick="copyCoverLetter()" class="btn btn-outline btn-sm">Copy</button>
+                <button id="cl-pdf-btn" onclick="downloadCoverLetterPdf()" class="btn btn-outline btn-sm" style="display:none;">PDF</button>
+            </div>
+        </div>
+        <pre id="cover-letter-output"></pre>
+    </div>
+
     <div id="history-section" class="history-section">
         <h3>Recent Tailors</h3>
         <div id="history-list"></div>
+    </div>
+</div>
+
+<!-- Import URL Modal -->
+<div id="import-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h3>Import Job Description from URL</h3>
+        <p class="text-muted">Paste a job posting URL and we'll extract the description.</p>
+        <div class="form-group">
+            <input type="url" id="import-url" placeholder="https://linkedin.com/jobs/view/...">
+        </div>
+        <div class="modal-actions">
+            <button onclick="closeImportModal()" class="btn btn-outline btn-sm">Cancel</button>
+            <button onclick="doImportUrl()" class="btn btn-primary btn-sm" id="import-btn">Import</button>
+        </div>
     </div>
 </div>
 

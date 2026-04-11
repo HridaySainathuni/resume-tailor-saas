@@ -58,3 +58,60 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for("pages.landing"))
+
+
+@auth_bp.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        user = User.query.filter_by(email=email).first()
+
+        if user:
+            token = user.generate_reset_token()
+            db.session.commit()
+
+            # Build reset URL
+            reset_url = request.host_url.rstrip("/") + url_for("auth.reset_password", token=token)
+
+            # Log the reset link (in production, send via email)
+            import logging
+            logging.getLogger(__name__).info(f"Password reset requested for {email}: {reset_url}")
+
+            # TODO: Send email with reset_url when email service is configured
+            # For now, the reset link is logged server-side
+
+        # Always show success to prevent email enumeration
+        flash("If that email exists, we've sent a password reset link. Check your inbox.", "success")
+        return redirect(url_for("auth.login"))
+
+    return render_template("forgot_password.html")
+
+
+@auth_bp.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    user = User.verify_reset_token(token)
+    if not user:
+        flash("Invalid or expired reset link. Please request a new one.", "error")
+        return redirect(url_for("auth.forgot_password"))
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+
+        if len(password) < 8:
+            flash("Password must be at least 8 characters.", "error")
+            return render_template("reset_password.html", token=token)
+
+        if password != confirm:
+            flash("Passwords don't match.", "error")
+            return render_template("reset_password.html", token=token)
+
+        user.set_password(password)
+        user.reset_token_hash = None
+        user.reset_token_expiry = None
+        db.session.commit()
+
+        flash("Password reset successfully! Please log in.", "success")
+        return redirect(url_for("auth.login"))
+
+    return render_template("reset_password.html", token=token)

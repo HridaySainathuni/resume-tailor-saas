@@ -1,40 +1,65 @@
 {% extends "base.html" %}
-{% block title %}AI Resume Tailor{% endblock %}
+{% block title %}AI Resume Tailor — Land More Interviews{% endblock %}
 {% block content %}
 <section class="hero">
     <h1>Land More Interviews with AI-Tailored Resumes</h1>
-    <p class="subtitle">Paste your resume + job description. Get a perfectly optimized resume in seconds.</p>
+    <p class="subtitle">Paste your resume + job description. Get a perfectly optimized resume and cover letter in 30 seconds. Beat the ATS every time.</p>
     <div class="hero-cta">
-        <a href="/auth/signup" class="btn btn-primary btn-lg">Start Free (3 Tailors)</a>
-        <p class="muted">Then $9/month for unlimited</p>
+        <a href="/auth/signup" class="btn btn-primary btn-lg">Start Free — No Credit Card</a>
+        <p class="muted">3 free tailors included. Then $9/month for unlimited.</p>
+    </div>
+</section>
+
+<section class="social-proof">
+    <p>Trusted by job seekers to optimize their applications</p>
+    <div class="stats">
+        <div>
+            <span class="stat-num">30s</span>
+            Average tailor time
+        </div>
+        <div>
+            <span class="stat-num">85%+</span>
+            ATS match scores
+        </div>
+        <div>
+            <span class="stat-num">2x</span>
+            More interview callbacks
+        </div>
     </div>
 </section>
 
 <section class="features">
+    <h2>Everything You Need to Apply Smarter</h2>
     <div class="feature-grid">
         <div class="feature-card">
+            <div class="feature-icon">&#9889;</div>
+            <h3>AI Resume Tailoring</h3>
+            <p>Claude AI rewrites your resume for each job. Mirrors keywords, reorders bullets, and optimizes for ATS — without fabricating anything.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">&#9993;</div>
+            <h3>Cover Letter Generator</h3>
+            <p>One click generates a personalized cover letter that references your actual experience and the specific role. No more blank page anxiety.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">&#9776;</div>
             <h3>ATS Keyword Scoring</h3>
-            <p>See exactly which keywords you're matching and missing. Get a score showing how well your resume will pass ATS filters.</p>
+            <p>See your exact keyword match score, which keywords you're hitting, and which you're missing — before you submit.</p>
         </div>
         <div class="feature-card">
+            <div class="feature-icon">&#8596;</div>
             <h3>Side-by-Side Comparison</h3>
-            <p>Compare your original and tailored resume side by side. See exactly what changed and why.</p>
+            <p>Compare your original and tailored resume side by side. See exactly what changed and approve every edit.</p>
         </div>
         <div class="feature-card">
-            <h3>PDF Download</h3>
-            <p>Download your tailored resume as a clean, professionally formatted PDF. Ready to submit.</p>
+            <div class="feature-icon">&#128196;</div>
+            <h3>PDF + DOCX Download</h3>
+            <p>Download your tailored resume in clean, professional PDF or editable DOCX format. Ready to submit anywhere.</p>
         </div>
         <div class="feature-card">
+            <div class="feature-icon">&#128274;</div>
             <h3>Truthful Always</h3>
-            <p>Never fabricates experience. Reorders and rephrases your real achievements for maximum impact.</p>
-        </div>
-        <div class="feature-card">
-            <h3>30-Second Results</h3>
-            <p>Paste, click, done. No more spending hours rewriting for each application.</p>
-        </div>
-        <div class="feature-card">
-            <h3>Unlimited History</h3>
-            <p>Every tailored resume is saved. Come back anytime to reuse or download previous versions.</p>
+            <p>Our AI never fabricates experience, degrees, or skills. It only reorganizes and rephrases what you've actually done.</p>
         </div>
     </div>
 </section>
@@ -50,41 +75,83 @@
         <div class="step">
             <span class="step-num">2</span>
             <h4>Paste the Job Description</h4>
-            <p>Copy the full job posting you want to apply for.</p>
+            <p>Copy from LinkedIn, Indeed, or any job board.</p>
         </div>
         <div class="step">
             <span class="step-num">3</span>
-            <h4>Get Your Tailored Resume</h4>
-            <p>Instantly receive a version optimized for that specific role.</p>
+            <h4>Get Tailored Results</h4>
+            <p>Optimized resume + cover letter in 30 seconds. Download as PDF or DOCX.</p>
         </div>
     </div>
 </section>
 
 <section class="pricing" id="pricing">
-    <h2>Simple Pricing</h2>
+    <h2>Simple, Transparent Pricing</h2>
+    <p class="pricing-sub">No hidden fees. Cancel anytime.</p>
     <div class="pricing-cards">
         <div class="pricing-card">
             <h3>Free</h3>
             <div class="price">$0</div>
+            <p class="price-note">No credit card required</p>
             <ul>
                 <li>3 resume tailors</li>
                 <li>Full AI optimization</li>
+                <li>ATS keyword scoring</li>
+                <li>PDF download</li>
                 <li>History saved</li>
             </ul>
-            <a href="/auth/signup" class="btn btn-outline">Get Started</a>
+            <a href="/auth/signup" class="btn btn-outline btn-block">Get Started Free</a>
         </div>
         <div class="pricing-card featured">
             <h3>Pro</h3>
             <div class="price">$9<span>/mo</span></div>
+            <p class="price-note">Less than one coffee per week</p>
             <ul>
-                <li>Unlimited tailors</li>
+                <li>Unlimited resume tailors</li>
+                <li>Cover letter generator</li>
                 <li>ATS keyword scoring</li>
-                <li>PDF download</li>
+                <li>PDF + DOCX download</li>
                 <li>Side-by-side comparison</li>
                 <li>Full history</li>
+                <li>Priority support</li>
             </ul>
-            <a href="/auth/signup" class="btn btn-primary">Start Free, Upgrade Later</a>
+            <a href="/auth/signup" class="btn btn-primary btn-block">Start Free, Upgrade Later</a>
         </div>
     </div>
 </section>
+
+<section class="faq">
+    <h2>Frequently Asked Questions</h2>
+
+    <details class="faq-item">
+        <summary>Does the AI make up experience I don't have?</summary>
+        <p>Never. Our AI is specifically instructed to only reorganize, rephrase, and optimize your existing experience. It mirrors keywords from the job description and reorders your bullet points for relevance, but it will never fabricate skills, degrees, or accomplishments.</p>
+    </details>
+
+    <details class="faq-item">
+        <summary>What's an ATS and why does it matter?</summary>
+        <p>An Applicant Tracking System (ATS) is software that companies use to filter resumes before a human sees them. Up to 75% of resumes are rejected by ATS before reaching a recruiter. Our tailoring ensures your resume matches the keywords and phrasing that ATS systems look for.</p>
+    </details>
+
+    <details class="faq-item">
+        <summary>Can I cancel my subscription anytime?</summary>
+        <p>Yes, absolutely. Cancel anytime from your Account Settings or via the Stripe billing portal. You'll keep access until the end of your current billing period. No questions asked.</p>
+    </details>
+
+    <details class="faq-item">
+        <summary>Is my resume data safe?</summary>
+        <p>Yes. Your data is encrypted in transit and at rest. We never sell your data, share it with recruiters, or use it for advertising. You can export or delete all your data anytime. See our <a href="/privacy">Privacy Policy</a> for details.</p>
+    </details>
+
+    <details class="faq-item">
+        <summary>How is this different from ChatGPT?</summary>
+        <p>ResumeTailor is purpose-built for job applications. Our AI prompt is specifically tuned for resume optimization — it knows ATS rules, keyword mirroring, and resume formatting best practices. Plus you get ATS scoring, PDF/DOCX export, cover letters, and your full history saved — all in one focused tool.</p>
+    </details>
+
+    <details class="faq-item">
+        <summary>What AI model do you use?</summary>
+        <p>We use Anthropic's Claude, one of the most capable and safety-focused AI models available. It excels at following instructions precisely, which is critical for resume tailoring — it won't hallucinate or fabricate experience.</p>
+    </details>
+</section>
+
 {% endblock %}
