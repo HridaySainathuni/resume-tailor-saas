@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}AI Resume Tailor{% endblock %}
+{% block content %}
+<section class="hero">
+    <h1>Land More Interviews with AI-Tailored Resumes</h1>
+    <p class="subtitle">Paste your resume + job description. Get a perfectly optimized resume in seconds.</p>
+    <div class="hero-cta">
+        <a href="/auth/signup" class="btn btn-primary btn-lg">Start Free (3 Tailors)</a>
+        <p class="muted">Then $9/month for unlimited</p>
+    </div>
+</section>
+
+<section class="features">
+    <div class="feature-grid">
+        <div class="feature-card">
+            <h3>ATS Keyword Scoring</h3>
+            <p>See exactly which keywords you're matching and missing. Get a score showing how well your resume will pass ATS filters.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Side-by-Side Comparison</h3>
+            <p>Compare your original and tailored resume side by side. See exactly what changed and why.</p>
+        </div>
+        <div class="feature-card">
+            <h3>PDF Download</h3>
+            <p>Download your tailored resume as a clean, professionally formatted PDF. Ready to submit.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Truthful Always</h3>
+            <p>Never fabricates experience. Reorders and rephrases your real achievements for maximum impact.</p>
+        </div>
+        <div class="feature-card">
+            <h3>30-Second Results</h3>
+            <p>Paste, click, done. No more spending hours rewriting for each application.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Unlimited History</h3>
+            <p>Every tailored resume is saved. Come back anytime to reuse or download previous versions.</p>
+        </div>
+    </div>
+</section>
+
+<section class="how-it-works">
+    <h2>How It Works</h2>
+    <div class="steps">
+        <div class="step">
+            <span class="step-num">1</span>
+            <h4>Paste Your Resume</h4>
+            <p>Your current resume text — any format works.</p>
+        </div>
+        <div class="step">
+            <span class="step-num">2</span>
+            <h4>Paste the Job Description</h4>
+            <p>Copy the full job posting you want to apply for.</p>
+        </div>
+        <div class="step">
+            <span class="step-num">3</span>
+            <h4>Get Your Tailored Resume</h4>
+            <p>Instantly receive a version optimized for that specific role.</p>
+        </div>
+    </div>
+</section>
+
+<section class="pricing" id="pricing">
+    <h2>Simple Pricing</h2>
+    <div class="pricing-cards">
+        <div class="pricing-card">
+            <h3>Free</h3>
+            <div class="price">$0</div>
+            <ul>
+                <li>3 resume tailors</li>
+                <li>Full AI optimization</li>
+                <li>History saved</li>
+            </ul>
+            <a href="/auth/signup" class="btn btn-outline">Get Started</a>
+        </div>
+        <div class="pricing-card featured">
+            <h3>Pro</h3>
+            <div class="price">$9<span>/mo</span></div>
+            <ul>
+                <li>Unlimited tailors</li>
+                <li>ATS keyword scoring</li>
+                <li>PDF download</li>
+                <li>Side-by-side comparison</li>
+                <li>Full history</li>
+            </ul>
+            <a href="/auth/signup" class="btn btn-primary">Start Free, Upgrade Later</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

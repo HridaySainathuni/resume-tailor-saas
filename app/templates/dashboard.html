@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="dashboard">
+    <div class="dash-header">
+        <h2>Tailor Your Resume</h2>
+        <div class="user-status">
+            {% if user.is_subscribed %}
+                <span class="badge badge-pro">Pro</span>
+                <button onclick="manageSubscription()" class="btn btn-sm btn-outline">Manage Plan</button>
+            {% else %}
+                <span class="badge badge-free">Free: {{ user.free_uses_remaining }} left</span>
+                {% if user.free_uses_remaining <= 0 %}
+                    <button onclick="subscribe()" class="btn btn-sm btn-primary">Upgrade to Pro — $9/mo</button>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="tailor-form">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="job_title">Job Title</label>
+                <input type="text" id="job_title" placeholder="e.g. Senior Software Engineer">
+            </div>
+            <div class="form-group">
+                <label for="company">Company</label>
+                <input type="text" id="company" placeholder="e.g. Google">
+            </div>
+        </div>
+
+        <div class="form-row two-col">
+            <div class="form-group">
+                <label for="resume">Your Resume</label>
+                <textarea id="resume" rows="15" placeholder="Paste your current resume here..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="job_description">Job Description</label>
+                <textarea id="job_description" rows="15" placeholder="Paste the full job description here..."></textarea>
+            </div>
+        </div>
+
+        <button id="tailor-btn" onclick="tailorResume()" class="btn btn-primary btn-lg">
+            Tailor My Resume
+        </button>
+    </div>
+
+    <div id="result-section" class="result-section" style="display:none;">
+        <div class="result-header">
+            <h3>Your Tailored Resume</h3>
+            <div class="result-actions">
+                <button onclick="copyResult()" class="btn btn-outline btn-sm">Copy to Clipboard</button>
+                <button id="pdf-btn" onclick="downloadPdf()" class="btn btn-outline btn-sm" style="display:none;">Download PDF</button>
+                <button onclick="toggleCompare()" class="btn btn-outline btn-sm">Compare Original</button>
+                <button onclick="runAtsScore()" class="btn btn-outline btn-sm">ATS Score</button>
+            </div>
+        </div>
+
+        <!-- ATS Score Card -->
+        <div id="ats-section" style="display:none;" class="ats-card">
+            <div class="ats-header">
+                <div class="ats-score-circle" id="ats-circle">
+                    <span id="ats-score-num">--</span>
+                </div>
+                <div class="ats-info">
+                    <h4>ATS Keyword Match</h4>
+                    <p id="ats-grade">--</p>
+                    <p id="ats-detail" class="text-muted"></p>
+                </div>
+            </div>
+            <div class="ats-keywords">
+                <div class="ats-col">
+                    <h5>Matched Keywords</h5>
+                    <div id="ats-matched"></div>
+                </div>
+                <div class="ats-col">
+                    <h5>Missing Keywords</h5>
+                    <div id="ats-missing"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison View -->
+        <div id="compare-section" style="display:none;" class="compare-view">
+            <div class="compare-col">
+                <h4>Original Resume</h4>
+                <pre id="original-output"></pre>
+            </div>
+            <div class="compare-col">
+                <h4>Tailored Resume</h4>
+                <pre id="tailored-compare"></pre>
+            </div>
+        </div>
+
+        <!-- Single View -->
+        <pre id="tailored-output"></pre>
+    </div>
+
+    <div id="history-section" class="history-section">
+        <h3>Recent Tailors</h3>
+        <div id="history-list"></div>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}
