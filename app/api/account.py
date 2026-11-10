@@ -1,6 +1,5 @@
 """Account settings routes — password change, data export, account deletion."""
-import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, logout_user
@@ -72,7 +71,7 @@ def export_data():
             }
             for r in results
         ],
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
     }
 
     response = jsonify(data)

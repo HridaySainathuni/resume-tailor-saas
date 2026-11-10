@@ -6,12 +6,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdk-pixbuf-2.0-0 libffi-dev libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
+RUN groupadd -r app && useradd -r -g app app
+
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+RUN chown -R app:app /app
+
+USER app
 
 ENV FLASK_APP=run.py
 ENV PORT=8080
