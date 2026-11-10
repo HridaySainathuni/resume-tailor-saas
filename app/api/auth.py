@@ -67,18 +67,10 @@ def forgot_password():
         user = User.query.filter_by(email=email).first()
 
         if user:
-            token = user.generate_reset_token()
+            # Generate the token and store only its hash. The reset link
+            # must be sent by email, never written to server logs.
+            user.generate_reset_token()
             db.session.commit()
-
-            # Build reset URL
-            reset_url = request.host_url.rstrip("/") + url_for("auth.reset_password", token=token)
-
-            # Log the reset link (in production, send via email)
-            import logging
-            logging.getLogger(__name__).info(f"Password reset requested for {email}: {reset_url}")
-
-            # TODO: Send email with reset_url when email service is configured
-            # For now, the reset link is logged server-side
 
         # Always show success to prevent email enumeration
         flash("If that email exists, we've sent a password reset link. Check your inbox.", "success")

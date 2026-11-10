@@ -1,8 +1,8 @@
 """Stripe billing routes — subscription management."""
-from datetime import datetime
+from datetime import datetime, timezone
 
 import stripe
-from flask import Blueprint, current_app, jsonify, redirect, request, url_for
+from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 
 from app import db
@@ -101,7 +101,7 @@ def _handle_subscription_updated(sub):
         status = sub.get("status")
         user.is_subscribed = status in ("active", "trialing")
         if sub.get("current_period_end"):
-            user.subscription_end = datetime.utcfromtimestamp(sub["current_period_end"])
+            user.subscription_end = datetime.fromtimestamp(sub["current_period_end"], tz=timezone.utc)
         db.session.commit()
 
 
