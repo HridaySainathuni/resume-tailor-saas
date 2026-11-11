@@ -6,10 +6,12 @@ up past applications through one interface. Runs over stdio.
 """
 from mcp.server.mcpserver import MCPServer
 
+from mcp_server.tools import fetch_job_posting
+
 
 def create_server() -> MCPServer:
     """Build the MCP server with its name and instructions."""
-    return MCPServer(
+    server = MCPServer(
         name="resume-tailor",
         instructions=(
             "Tools for tailoring a resume to a job posting. "
@@ -19,6 +21,10 @@ def create_server() -> MCPServer:
             "come from the resume or the posting."
         ),
     )
+
+    server.tool()(fetch_job_posting)
+
+    return server
 
 
 server = create_server()
