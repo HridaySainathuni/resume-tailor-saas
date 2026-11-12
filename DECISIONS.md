@@ -91,3 +91,27 @@ Why: MIT keeps the code usable by others with minimal friction, which fits a por
 Choice: stay on Flask.
 Alternative: migrate to FastAPI now.
 Why: a framework migration is a large change on its own. It would hide the cleanup work in this milestone and delay the agent work that matters more. Revisit it after the agent, verifier, and evals land.
+
+## MCP Python SDK v2 (MCPServer)
+
+Choice: use the MCP Python SDK v2, with the MCPServer class, pinned as mcp==2.3.0.
+Alternative: use SDK v1 with FastMCP, or build the protocol by hand over JSON-RPC.
+Why: FastMCP was renamed to MCPServer in v2, so the v1 name is already outdated. The SDK handles the protocol, tool registration, and transport, which is less code to maintain than a hand built server. Pinning the version keeps a future SDK change from breaking the server silently.
+
+## stdio transport for the MCP server
+
+Choice: run the MCP server over stdio, started as a subprocess by the agent host.
+Alternative: run it over HTTP with server-sent events, or as a long lived service.
+Why: stdio is the standard transport for a local MCP server and needs no port, no auth, and no deploy step. The server only runs while the agent needs it. An HTTP transport adds a service to host and secure for no benefit at this stage. If a remote host needs the tools later, the transport can change without touching the tool functions.
+
+## MCP tools as thin wrappers over the service layer
+
+Choice: each MCP tool calls the existing function in app/services and returns its result, adding only input validation and error shaping.
+Alternative: duplicate the service logic inside the tool, or call the Flask routes over HTTP.
+Why: the service layer already holds the tested logic, and Milestone 1 split it out so it could be reused without a request. Duplicating it would mean two copies to keep in sync. Calling the routes over HTTP would need a running server and a logged in user for tools that do not need either.
+
+## Tool functions kept as plain functions
+
+Choice: the functions in mcp_server/tools.py are plain Python functions. server.py registers them as MCP tools, but the functions themselves know nothing about MCP.
+Alternative: write the tools with MCP decorators and types throughout, or put the logic in the server file.
+Why: Milestone 3 adds an agent loop that calls these tools in-process. Plain functions let the loop import and call them directly, with no MCP server running and no protocol overhead. Keeping them separate from server.py also keeps the transport and the tool logic independent, so either can change on its own.

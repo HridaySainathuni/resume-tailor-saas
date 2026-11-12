@@ -61,10 +61,27 @@ app/
   templates/      # Jinja HTML pages
   static/         # CSS and JavaScript
 tests/            # pytest suite, mocked Anthropic and Stripe calls
+mcp_server/       # MCP server: tools the agent loop calls (see below)
 run.py            # entry point
 Dockerfile
 render.yaml       # Render deployment config
 ```
+
+## MCP server
+
+The repo includes an MCP server in `mcp_server/` that exposes the app's services as tools for an agent. It runs over stdio using the MCP Python SDK v2 and is started by the agent host as a subprocess. The tool functions are plain Python functions that wrap the services in `app/services/`, so the agent loop can also call them in-process.
+
+Run it with:
+
+```bash
+python -m mcp_server
+```
+
+Tools exposed so far:
+
+| Tool | Description |
+| --- | --- |
+| fetch_job_posting | Fetch a job posting from a URL and return its text, title, and company |
 
 ## API endpoints
 
