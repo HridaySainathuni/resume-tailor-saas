@@ -9,6 +9,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from flask import has_app_context
+
+from app import create_app
+from app.models import TailorResult
 from app.services.job_import import fetch_job_posting as _fetch_job_posting
 
 WIKIPEDIA_SUMMARY_URL = (
@@ -68,3 +72,38 @@ def research_company(name: str) -> dict:
         "summary": data["extract"],
         "url": page_url or url,
     }
+
+
+def read_resume(user_id: int):
+    """Return the user's most recent resume text.
+
+    The resume text is the original_resume of the user's latest
+    tailor result. Runs inside a Flask app context: reuses the
+    active one when there is one (for example in tests), otherwise
+    builds an app with the factory so the MCP server can call it
+    without a request.
+
+    Args:
+        user_id: The id of the user whose resume to read.
+
+    Returns:
+        The resume text on success, or {"error": "No resume found"}
+        when nothing is stored for that user.
+    """
+    if has_app_context():
+        return _read_resume_from_db(user_id)
+    app = create_app()
+    with app.app_context():
+        return _read_resume_from_db(user_id)
+
+
+def _read_resume_from_db(user_id: int):
+    """Look up the latest stored resume for a user in this context."""
+    latest = (
+        TailorResult.query.filter_by(user_id=user_id)
+        .order_by(TailorResult.created_at.desc(), TailorResult.id.desc())
+        .first()
+    )
+    if latest is None or not latest.original_resume:
+        return {"error": "No resume found"}
+    return latest.original_resume

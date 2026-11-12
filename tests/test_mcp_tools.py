@@ -1,4 +1,4 @@
-"""Tests for the fetch_job_posting MCP tool.
+"""Tests for the MCP tools.
 
 Network access is mocked: urllib.request.urlopen returns a fake
 response holding canned HTML, so no real HTTP request is made.
@@ -9,8 +9,10 @@ import urllib.request
 
 import pytest
 
+from app import db
+from app.models import TailorResult
 from mcp_server.server import create_server
-from mcp_server.tools import fetch_job_posting, research_company
+from mcp_server.tools import fetch_job_posting, read_resume, research_company
 
 FAKE_HTML = """<html>
 <head><title>Software Engineer - Acme Corp</title></head>
@@ -140,3 +142,37 @@ def test_server_exposes_research_company():
     tools = asyncio.run(server.list_tools())
 
     assert "research_company" in [tool.name for tool in tools]
+
+
+def _seed_tailor_result(user_id, resume_text):
+    db.session.add(
+        TailorResult(
+            user_id=user_id,
+            original_resume=resume_text,
+            job_description="Example job description.",
+            tailored_resume="Tailored resume text.",
+        )
+    )
+    db.session.commit()
+
+
+def test_read_resume_returns_most_recent_text(app, user):
+    with app.app_context():
+        _seed_tailor_result(user.id, "Old resume text.")
+        _seed_tailor_result(user.id, "Latest resume text.")
+
+        assert read_resume(user.id) == "Latest resume text."
+
+
+def test_read_resume_unknown_user_returns_error(app):
+    with app.app_context():
+        result = read_resume(999999)
+
+    assert result == {"error": "No resume found"}
+
+
+def test_server_exposes_read_resume():
+    server = create_server()
+    tools = asyncio.run(server.list_tools())
+
+    assert "read_resume" in [tool.name for tool in tools]
