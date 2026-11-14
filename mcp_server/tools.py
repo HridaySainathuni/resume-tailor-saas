@@ -97,6 +97,59 @@ def read_resume(user_id: int):
         return _read_resume_from_db(user_id)
 
 
+def get_past_applications(user_id: int) -> dict:
+    """Return the user's past applications, newest first.
+
+    Each past application is a stored tailor result, carrying the
+    job title, company, and date it was created. Runs inside a
+    Flask app context: reuses the active one when there is one
+    (for example in tests), otherwise builds an app with the
+    factory so the MCP server can call it without a request.
+
+    Args:
+        user_id: The id of the user whose applications to list.
+
+    Returns:
+        {"applications": [...]} with one entry per past
+        application, an empty list when the user has none, or
+        {"error": ...} for invalid input or a database failure.
+    """
+    if not isinstance(user_id, int) or isinstance(user_id, bool):
+        return {"error": "A valid user id is required."}
+    if has_app_context():
+        return _get_past_applications_from_db(user_id)
+    app = create_app()
+    with app.app_context():
+        return _get_past_applications_from_db(user_id)
+
+
+def _get_past_applications_from_db(user_id: int) -> dict:
+    """Look up a user's past applications in this context."""
+    try:
+        results = (
+            TailorResult.query.filter_by(user_id=user_id)
+            .order_by(TailorResult.created_at.desc(), TailorResult.id.desc())
+            .all()
+        )
+    except Exception as exc:
+        return {"error": f"Could not load past applications: {exc}"}
+    return {
+        "applications": [
+            {
+                "id": result.id,
+                "job_title": result.job_title,
+                "company": result.company,
+                "created_at": (
+                    result.created_at.isoformat()
+                    if result.created_at is not None
+                    else None
+                ),
+            }
+            for result in results
+        ]
+    }
+
+
 def _read_resume_from_db(user_id: int):
     """Look up the latest stored resume for a user in this context."""
     latest = (

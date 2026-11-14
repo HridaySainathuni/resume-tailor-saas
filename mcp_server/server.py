@@ -6,7 +6,12 @@ up past applications through one interface. Runs over stdio.
 """
 from mcp.server.mcpserver import MCPServer
 
-from mcp_server.tools import fetch_job_posting, read_resume, research_company
+from mcp_server.tools import (
+    fetch_job_posting,
+    get_past_applications,
+    read_resume,
+    research_company,
+)
 
 
 def create_server() -> MCPServer:
@@ -25,6 +30,7 @@ def create_server() -> MCPServer:
     server.tool()(fetch_job_posting)
     server.tool()(research_company)
     server.tool()(read_resume)
+    server.tool()(get_past_applications)
 
     return server
 

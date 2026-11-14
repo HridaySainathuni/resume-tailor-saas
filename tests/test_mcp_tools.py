@@ -6,13 +6,19 @@ response holding canned HTML, so no real HTTP request is made.
 import asyncio
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 
 import pytest
 
 from app import db
 from app.models import TailorResult
 from mcp_server.server import create_server
-from mcp_server.tools import fetch_job_posting, read_resume, research_company
+from mcp_server.tools import (
+    fetch_job_posting,
+    get_past_applications,
+    read_resume,
+    research_company,
+)
 
 FAKE_HTML = """<html>
 <head><title>Software Engineer - Acme Corp</title></head>
@@ -176,3 +182,67 @@ def test_server_exposes_read_resume():
     tools = asyncio.run(server.list_tools())
 
     assert "read_resume" in [tool.name for tool in tools]
+
+
+def _seed_application(user_id, job_title, company, created_at):
+    db.session.add(
+        TailorResult(
+            user_id=user_id,
+            job_title=job_title,
+            company=company,
+            original_resume="Resume text.",
+            job_description="Example job description.",
+            tailored_resume="Tailored resume text.",
+            created_at=created_at,
+        )
+    )
+    db.session.commit()
+
+
+def test_get_past_applications_returns_newest_first(app, user):
+    with app.app_context():
+        _seed_application(
+            user.id, "Junior Engineer", "Old Corp",
+            datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+        _seed_application(
+            user.id, "Software Engineer", "Acme Corp",
+            datetime(2026, 11, 1, tzinfo=timezone.utc),
+        )
+        _seed_application(
+            user.id, "Senior Engineer", "New Corp",
+            datetime(2026, 11, 10, tzinfo=timezone.utc),
+        )
+
+        result = get_past_applications(user.id)
+
+    assert [entry["job_title"] for entry in result["applications"]] == [
+        "Senior Engineer",
+        "Software Engineer",
+        "Junior Engineer",
+    ]
+    newest = result["applications"][0]
+    assert newest["company"] == "New Corp"
+    assert newest["created_at"] == "2026-11-10T00:00:00+00:00"
+    assert set(newest) == {"id", "job_title", "company", "created_at"}
+
+
+def test_get_past_applications_empty_for_new_user(app, user):
+    with app.app_context():
+        result = get_past_applications(user.id)
+
+    assert result == {"applications": []}
+
+
+def test_get_past_applications_invalid_user_id_returns_error():
+    result = get_past_applications(None)
+
+    assert "error" in result
+    assert result["error"]
+
+
+def test_server_exposes_get_past_applications():
+    server = create_server()
+    tools = asyncio.run(server.list_tools())
+
+    assert "get_past_applications" in [tool.name for tool in tools]
