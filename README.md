@@ -77,11 +77,14 @@ Run it with:
 python -m mcp_server
 ```
 
-Tools exposed so far:
+Tools exposed:
 
 | Tool | Description |
 | --- | --- |
 | fetch_job_posting | Fetch a job posting from a URL and return its text, title, and company |
+| research_company | Look up a company on Wikipedia and return its summary and page URL |
+| read_resume | Return the user's most recent resume text from their latest tailoring result |
+| get_past_applications | List the user's past applications, newest first, with job title, company, and date |
 
 ## API endpoints
 
