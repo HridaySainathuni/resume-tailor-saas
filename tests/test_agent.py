@@ -7,7 +7,8 @@ functions are replaced with fakes on the app.agent module.
 import pytest
 
 import app.agent
-from app.agent import MAX_TOOL_TURNS, gather_context, run_agent
+from app.agent import MAX_TOOL_TURNS, gather_context, parse_deliverables, run_agent
+from app.models import TailorResult
 
 
 class FakeTextBlock:
@@ -54,6 +55,11 @@ class FakeClient:
         self.messages = FakeMessages(responses)
 
 
+def _deliverables_reply(resume="Jane Doe, Python engineer. Tailored for Acme Corp.",
+                        letter="Dear Acme team, I would love to join."):
+    return f"=== TAILORED RESUME ===\n{resume}\n=== COVER LETTER ===\n{letter}"
+
+
 @pytest.fixture()
 def fake_tools(monkeypatch):
     """Replace the four tool functions with fakes that record calls."""
@@ -93,7 +99,7 @@ def test_gather_context_calls_all_four_tools(fake_tools):
     assert context["resume"] == "Jane Doe, Python engineer."
 
 
-def test_run_agent_calls_tool_and_returns_final_text(fake_tools):
+def test_run_agent_calls_tool_and_returns_deliverables(app, user, fake_tools):
     client = FakeClient(
         [
             FakeResponse(
@@ -103,13 +109,16 @@ def test_run_agent_calls_tool_and_returns_final_text(fake_tools):
                     )
                 ]
             ),
-            FakeResponse([FakeTextBlock("Strong fit: Python experience matches.")]),
+            FakeResponse([FakeTextBlock(_deliverables_reply())]),
         ]
     )
 
-    result = run_agent("https://example.com/jobs/1", 7, client=client)
+    result = run_agent("https://example.com/jobs/1", user.id, client=client)
 
-    assert result == "Strong fit: Python experience matches."
+    assert result["tailored_resume"] == "Jane Doe, Python engineer. Tailored for Acme Corp."
+    assert result["cover_letter"] == "Dear Acme team, I would love to join."
+    assert result["job_title"] == "Engineer"
+    assert result["company"] == "Acme Corp"
     assert fake_tools["research_company"] == "Acme Corp"
     second_call = client.messages.calls[1]
     tool_result = second_call["messages"][2]["content"][0]
@@ -119,13 +128,57 @@ def test_run_agent_calls_tool_and_returns_final_text(fake_tools):
     assert second_call["tools"][0]["name"] == "fetch_job_posting"
 
 
-def test_run_agent_no_tool_calls_returns_text_directly(fake_tools):
+def test_run_agent_full_run_saves_tailor_result(app, user, fake_tools):
+    client = FakeClient([FakeResponse([FakeTextBlock(_deliverables_reply())])])
+
+    result = run_agent("https://example.com/jobs/1", user.id, client=client)
+
+    assert result["ats_score"]["score"] >= 0
+    assert result["ats_score"]["grade"] in {"Excellent", "Good", "Fair", "Needs Work"}
+    saved = TailorResult.query.filter_by(user_id=user.id).first()
+    assert saved is not None
+    assert saved.id == result["result_id"]
+    assert saved.tailored_resume == result["tailored_resume"]
+    assert saved.cover_letter == result["cover_letter"]
+    assert saved.original_resume == "Jane Doe, Python engineer."
+    assert saved.job_description == "Python engineer wanted."
+    assert saved.job_title == "Engineer"
+    assert saved.company == "Acme Corp"
+
+
+def test_run_agent_job_fetch_failure_saves_nothing(app, user, fake_tools, monkeypatch):
+    monkeypatch.setattr(
+        "app.agent.fetch_job_posting", lambda url: {"error": "Could not fetch URL."}
+    )
+    client = FakeClient([FakeResponse([FakeTextBlock(_deliverables_reply())])])
+
+    with pytest.raises(ValueError, match="Could not fetch job posting"):
+        run_agent("https://example.com/jobs/1", user.id, client=client)
+
+    assert TailorResult.query.count() == 0
+    assert len(client.messages.calls) == 0
+
+
+def test_run_agent_missing_resume_saves_nothing(app, user, fake_tools, monkeypatch):
+    monkeypatch.setattr(
+        "app.agent.read_resume", lambda user_id: {"error": "No resume found"}
+    )
+    client = FakeClient([FakeResponse([FakeTextBlock(_deliverables_reply())])])
+
+    with pytest.raises(ValueError, match="Could not read resume"):
+        run_agent("https://example.com/jobs/1", user.id, client=client)
+
+    assert TailorResult.query.count() == 0
+    assert len(client.messages.calls) == 0
+
+
+def test_run_agent_raises_when_reply_has_no_deliverables(app, user, fake_tools):
     client = FakeClient([FakeResponse([FakeTextBlock("Direct answer.")])])
 
-    result = run_agent("https://example.com/jobs/1", 7, client=client)
+    with pytest.raises(ValueError, match="tailored resume and a cover letter"):
+        run_agent("https://example.com/jobs/1", user.id, client=client)
 
-    assert result == "Direct answer."
-    assert len(client.messages.calls) == 1
+    assert TailorResult.query.count() == 0
 
 
 def test_run_agent_raises_when_tool_turns_run_out(fake_tools):
@@ -138,3 +191,20 @@ def test_run_agent_raises_when_tool_turns_run_out(fake_tools):
     with pytest.raises(RuntimeError, match="did not finish"):
         run_agent("https://example.com/jobs/1", 7, client=client)
     assert len(client.messages.calls) == MAX_TOOL_TURNS
+
+
+def test_parse_deliverables_splits_resume_and_letter():
+    resume, letter = parse_deliverables(_deliverables_reply("My resume.", "My letter."))
+
+    assert resume == "My resume."
+    assert letter == "My letter."
+
+
+def test_parse_deliverables_raises_without_markers():
+    with pytest.raises(ValueError, match="tailored resume and a cover letter"):
+        parse_deliverables("Just some text.")
+
+
+def test_parse_deliverables_raises_when_section_is_empty():
+    with pytest.raises(ValueError, match="tailored resume and a cover letter"):
+        parse_deliverables("=== TAILORED RESUME ===\n=== COVER LETTER ===\nMy letter.")

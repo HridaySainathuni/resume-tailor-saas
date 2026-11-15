@@ -2,12 +2,19 @@
 
 Runs a plain Anthropic tool-calling loop over the four tool
 functions from mcp_server.tools. The loop gathers context up front,
-then lets the model call tools and returns the final text. The full
-tailor and cover letter flow lands in the next slice.
+then lets the model call tools and write the finished deliverables:
+a tailored resume and a cover letter. The deliverables are scored
+against the job description with the keyword helper and saved as
+a TailorResult row.
 """
 import json
 import os
 
+from flask import has_app_context
+
+from app import create_app, db
+from app.models import TailorResult
+from app.services.keywords import score_resume
 from app.services.llm import TAILOR_MODEL, create_anthropic_client
 from mcp_server.tools import (
     fetch_job_posting,
@@ -19,7 +26,35 @@ from mcp_server.tools import (
 AGENT_MAX_TOKENS = 4000
 MAX_TOOL_TURNS = 10
 
-AGENT_SYSTEM_PROMPT = """You are a resume tailoring assistant. You have tools to fetch a job posting, research a company, read the user's resume, and list past applications. Use them when you need more detail, then reply with a short summary of how the resume fits the role."""
+RESUME_MARKER = "=== TAILORED RESUME ==="
+COVER_LETTER_MARKER = "=== COVER LETTER ==="
+
+AGENT_SYSTEM_PROMPT = """You are a resume tailoring assistant. You have tools to fetch a job posting, research a company, read the user's resume, and list past applications. Use them when you need more detail.
+
+When you have what you need, write the finished deliverables and reply with exactly this format, nothing else:
+
+=== TAILORED RESUME ===
+<the full tailored resume text>
+
+=== COVER LETTER ===
+<the full cover letter text>
+
+Rules for the tailored resume:
+1. Keep ALL truthful experience — never fabricate or exaggerate
+2. Reorder bullet points to prioritize relevant experience
+3. Mirror keywords and phrases from the job description naturally
+4. Quantify achievements where possible
+5. Adjust the professional summary to target this specific role
+6. Remove or de-emphasize irrelevant details
+7. Keep formatting clean and ATS-friendly
+
+Rules for the cover letter:
+1. Use the resume to draw out relevant achievements — never fabricate
+2. Open with a strong hook specific to the company and role
+3. Show genuine enthusiasm and knowledge of the company when possible
+4. Keep it concise — 3-4 paragraphs, under 400 words
+5. End with a confident call-to-action
+6. Do NOT include placeholder brackets like [Your Name] — write it ready to send"""
 
 TOOL_DEFINITIONS = [
     {
@@ -119,7 +154,35 @@ Past applications:
 {json.dumps(context["past_applications"], indent=2)}
 ---
 
-Use the tools if you need more detail, then reply with a short summary of how the resume fits the role."""
+Use the tools if you need more detail, then write the tailored resume and cover letter in the format from your instructions."""
+
+
+def parse_deliverables(text: str) -> tuple:
+    """Split a loop reply into the tailored resume and cover letter.
+
+    The reply must carry both markers from the system prompt, with
+    the resume between them and the cover letter after the second.
+
+    Args:
+        text: The model's final text reply.
+
+    Returns:
+        A (tailored_resume, cover_letter) tuple, both stripped.
+
+    Raises:
+        ValueError: When a marker is missing or a section is empty.
+    """
+    if RESUME_MARKER not in text or COVER_LETTER_MARKER not in text:
+        raise ValueError(
+            "Agent reply did not include both a tailored resume and a cover letter."
+        )
+    resume = text.split(RESUME_MARKER, 1)[1].split(COVER_LETTER_MARKER, 1)[0].strip()
+    cover_letter = text.split(COVER_LETTER_MARKER, 1)[1].strip()
+    if not resume or not cover_letter:
+        raise ValueError(
+            "Agent reply did not include both a tailored resume and a cover letter."
+        )
+    return resume, cover_letter
 
 
 def _call_tool(name: str, arguments: dict):
@@ -157,29 +220,24 @@ def _content_to_dicts(content) -> list:
     return blocks
 
 
-def run_agent(job_url: str, user_id: int, client=None) -> str:
-    """Run the agent loop for one job application and return the final text.
+def _run_loop(client, messages: list) -> str:
+    """Drive the Anthropic tool-calling loop until the model replies with text.
 
-    Gathers context, then drives the Anthropic tool-calling loop:
-    tool_use turns call the plain tool functions and their results
-    are fed back as tool_result turns, until the model replies
-    with text.
+    Tool_use turns call the plain tool functions and their results
+    are fed back as tool_result turns.
 
     Args:
-        job_url: The URL of the job posting to tailor for.
-        user_id: The id of the user whose resume to tailor.
-        client: An Anthropic client. When omitted, one is built
-            from the ANTHROPIC_API_KEY environment variable.
+        client: An Anthropic client.
+        messages: The conversation so far, starting with the user
+            message built from the gathered context.
 
     Returns:
         The model's final text reply.
+
+    Raises:
+        RuntimeError: When the loop does not finish within
+            MAX_TOOL_TURNS tool turns.
     """
-    if client is None:
-        client = create_anthropic_client(os.environ.get("ANTHROPIC_API_KEY", ""))
-
-    context = gather_context(job_url, user_id)
-    messages = [{"role": "user", "content": build_agent_prompt(context)}]
-
     for _ in range(MAX_TOOL_TURNS):
         response = client.messages.create(
             model=TAILOR_MODEL,
@@ -203,3 +261,86 @@ def run_agent(job_url: str, user_id: int, client=None) -> str:
         messages.append({"role": "user", "content": tool_results})
 
     raise RuntimeError(f"Agent loop did not finish within {MAX_TOOL_TURNS} tool turns.")
+
+
+def _save_tailor_result(user_id, job_title, company, original_resume, job_description,
+                        tailored_resume, cover_letter) -> int:
+    """Save the finished deliverables as a TailorResult row and return its id.
+
+    Uses the active Flask app context when there is one, otherwise
+    builds an app like the tool functions in mcp_server.tools do.
+    """
+    result = TailorResult(
+        user_id=user_id,
+        job_title=job_title,
+        company=company,
+        original_resume=original_resume,
+        job_description=job_description,
+        tailored_resume=tailored_resume,
+        cover_letter=cover_letter,
+    )
+    if has_app_context():
+        db.session.add(result)
+        db.session.commit()
+        return result.id
+    app = create_app()
+    with app.app_context():
+        db.session.add(result)
+        db.session.commit()
+        return result.id
+
+
+def run_agent(job_url: str, user_id: int, client=None) -> dict:
+    """Run the agent loop for one job application and save the deliverables.
+
+    Gathers context, then drives the Anthropic tool-calling loop
+    until the model writes the tailored resume and cover letter.
+    The tailored resume is scored against the job description with
+    the keyword helper, and both deliverables are saved as a
+    TailorResult row.
+
+    Args:
+        job_url: The URL of the job posting to tailor for.
+        user_id: The id of the user whose resume to tailor.
+        client: An Anthropic client. When omitted, one is built
+            from the ANTHROPIC_API_KEY environment variable.
+
+    Returns:
+        A dict with "tailored_resume", "cover_letter", "ats_score",
+        "result_id", "job_title", and "company".
+
+    Raises:
+        ValueError: When the job posting cannot be fetched, the
+            resume cannot be read, or the model's reply has no
+            usable deliverables. Nothing is saved in those cases.
+    """
+    if client is None:
+        client = create_anthropic_client(os.environ.get("ANTHROPIC_API_KEY", ""))
+
+    context = gather_context(job_url, user_id)
+    job_posting = context["job_posting"]
+    if isinstance(job_posting, dict) and job_posting.get("error"):
+        raise ValueError(f"Could not fetch job posting: {job_posting['error']}")
+    resume = context["resume"]
+    if isinstance(resume, dict) and resume.get("error"):
+        raise ValueError(f"Could not read resume: {resume['error']}")
+
+    messages = [{"role": "user", "content": build_agent_prompt(context)}]
+    final_text = _run_loop(client, messages)
+    tailored_resume, cover_letter = parse_deliverables(final_text)
+
+    job_description = job_posting.get("text") or ""
+    job_title = job_posting.get("title") or ""
+    company = job_posting.get("company") or ""
+    ats_score = score_resume(tailored_resume, job_description)
+    result_id = _save_tailor_result(
+        user_id, job_title, company, resume, job_description, tailored_resume, cover_letter
+    )
+    return {
+        "tailored_resume": tailored_resume,
+        "cover_letter": cover_letter,
+        "ats_score": ats_score,
+        "result_id": result_id,
+        "job_title": job_title,
+        "company": company,
+    }
