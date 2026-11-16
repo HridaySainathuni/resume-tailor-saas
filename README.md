@@ -47,6 +47,7 @@ app/
   config.py       # settings from the environment, with validation
   __init__.py     # app factory, blueprints, security headers
   models.py       # User and TailorResult models
+  agent.py        # agent loop: gather context, drive the tool-calling loop, save deliverables
   api/
     tailor.py     # tailoring, cover letters, keyword scoring, exports, URL import
     auth.py       # signup, login, password reset
@@ -85,6 +86,20 @@ Tools exposed:
 | research_company | Look up a company on Wikipedia and return its summary and page URL |
 | read_resume | Return the user's most recent resume text from their latest tailoring result |
 | get_past_applications | List the user's past applications, newest first, with job title, company, and date |
+
+## Agent loop
+
+The agent loop lives in `app/agent.py` and turns one job posting into a tailored resume and a cover letter.
+
+`run_agent(job_url, user_id)` works in three steps:
+
+1. `gather_context` calls all four tools up front: `fetch_job_posting` for the posting, `research_company` for the posting's company, `read_resume` for the user's resume, and `get_past_applications` for their past applications.
+2. A plain Anthropic tool-calling loop drives the model over those same four tools, up to 10 tool turns, until the model replies with the finished deliverables. The model writes the tailored resume under `=== TAILORED RESUME ===` and the cover letter under `=== COVER LETTER ===`, and `parse_deliverables` splits the reply on those markers.
+3. The tailored resume is scored against the job description with the keyword helper, and both deliverables are saved as a `TailorResult` row.
+
+If the job posting cannot be fetched or the resume cannot be read, the loop raises before any model call and saves nothing. A reply without both marked sections also raises and saves nothing.
+
+The old single-call path in `app/services/llm.py` and the `/api/tailor` route is unchanged. The agent loop is a separate entry point that reuses the same services and tools.
 
 ## API endpoints
 
@@ -173,6 +188,5 @@ The repo includes a render.yaml that sets up a Docker web service and a Postgres
 
 ## Next steps
 
-- Turn tailoring into an agent that researches the company before writing.
 - Add a check that compares the output against the original resume to catch anything the model added that was not there.
 - Use past applications as context so later results improve.

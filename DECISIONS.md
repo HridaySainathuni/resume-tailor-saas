@@ -133,3 +133,33 @@ Why: the MCP server runs standalone over stdio with no request, so there is no a
 Choice: read_resume returns the original_resume column of the user's newest TailorResult row.
 Alternative: add a dedicated resumes table, read the uploaded resume file, or return the tailored_resume column.
 Why: the tailor results table is where the app already stores each resume a user submits, so there is no separate resume store and no new table or migration is needed for this milestone. original_resume holds the user's own words, while tailored_resume is generated output and must not be treated as the source resume. The agent grounds its claims in the resume the user wrote, so the tool returns that column from the newest result. When the user has never tailored a resume, nothing is stored and the tool returns an error instead of inventing a resume.
+
+## Plain Anthropic tool-calling loop instead of LangGraph
+
+Choice: the agent loop in app/agent.py is a plain Python loop that calls the Anthropic messages API directly, with the four tool functions passed as tool definitions. The loop runs until the model replies with text or hits the turn limit.
+Alternative: build the loop on LangGraph, or use a LangChain agent executor.
+Why: this loop has one job, a fixed sequence of context gathering followed by model turns that can call tools. A graph framework adds nodes, edges, state objects, and a dependency for behaviour a short loop already expresses clearly. The plain loop is easy to read, easy to test with a mocked client, and has no framework version to track. If the flow later needs branching, retries, or parallel tool calls, a framework becomes worth revisiting.
+
+## Gather context up front, then let the loop write
+
+Choice: gather_context calls all four tools before the first model turn, so the loop starts with the job posting, the company research, the user's resume, and their past applications. The model can still call tools during the loop if it needs more detail.
+Alternative: let the model call the tools one by one from an empty start, or put everything in the prompt and give the model no tools at all.
+Why: starting empty forces the model to spend turns rediscovering what the app already knows how to fetch, and a wrong first tool call can send the loop off track. Gathering up front guarantees the model has the full picture before it writes anything, and it keeps the tool calls available for follow up detail, such as re-fetching a posting. Prompt only with no tools would lose that follow up ability.
+
+## Marked sections for the deliverables
+
+Choice: the system prompt tells the model to reply with the tailored resume under "=== TAILORED RESUME ===" and the cover letter under "=== COVER LETTER ===", and parse_deliverables splits the reply on those markers. A missing marker or an empty section raises ValueError.
+Alternative: ask for JSON output, make two separate model calls (one per deliverable), or parse free-form text.
+Why: markers are simple to produce and simple to split on, with no escaping rules to get wrong. JSON output risks a malformed object when the model writes long text with quotes and line breaks. Two calls double the cost and the latency for work one reply already does. Free-form text has no reliable boundary between the two documents. Raising on a bad reply is better than saving a half parsed document.
+
+## Score the loop output with the keyword helper
+
+Choice: run_agent scores the tailored resume against the job description with the existing score_resume helper and returns the score with the result.
+Alternative: skip scoring in the loop, or score only in the single-call route.
+Why: the single-call path already returns an ATS score, so the loop should carry the same quality signal. Reusing the helper keeps one scoring implementation. The score is returned to the caller rather than stored, because the TailorResult model has no score column and adding one is a separate migration decision.
+
+## A failed fetch or resume read raises and saves nothing
+
+Choice: when the job posting cannot be fetched or the resume cannot be read, run_agent raises ValueError before any model call, and nothing is saved. A model reply without usable deliverables also raises before saving.
+Alternative: save a partial TailorResult with what was gathered, retry the fetch silently, or return empty deliverables.
+Why: a saved row is history the user can revisit. A row with no real posting or no resume would be misleading, and a row with empty deliverables is worse than no row. Raising surfaces the failure to the caller, which can report it honestly, instead of hiding it behind a saved record. Retrying silently would mask a bad URL or a missing resume that the user needs to fix.
