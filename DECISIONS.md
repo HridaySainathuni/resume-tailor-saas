@@ -91,3 +91,45 @@ Why: MIT keeps the code usable by others with minimal friction, which fits a por
 Choice: stay on Flask.
 Alternative: migrate to FastAPI now.
 Why: a framework migration is a large change on its own. It would hide the cleanup work in this milestone and delay the agent work that matters more. Revisit it after the agent, verifier, and evals land.
+
+## MCP Python SDK v2 (MCPServer)
+
+Choice: use the MCP Python SDK v2, with the MCPServer class, pinned as mcp==2.3.0.
+Alternative: use SDK v1 with FastMCP, or build the protocol by hand over JSON-RPC.
+Why: FastMCP was renamed to MCPServer in v2, so the v1 name is already outdated. The SDK handles the protocol, tool registration, and transport, which is less code to maintain than a hand built server. Pinning the version keeps a future SDK change from breaking the server silently.
+
+## stdio transport for the MCP server
+
+Choice: run the MCP server over stdio, started as a subprocess by the agent host.
+Alternative: run it over HTTP with server-sent events, or as a long lived service.
+Why: stdio is the standard transport for a local MCP server and needs no port, no auth, and no deploy step. The server only runs while the agent needs it. An HTTP transport adds a service to host and secure for no benefit at this stage. If a remote host needs the tools later, the transport can change without touching the tool functions.
+
+## MCP tools as thin wrappers over the service layer
+
+Choice: each MCP tool calls the existing function in app/services and returns its result, adding only input validation and error shaping.
+Alternative: duplicate the service logic inside the tool, or call the Flask routes over HTTP.
+Why: the service layer already holds the tested logic, and Milestone 1 split it out so it could be reused without a request. Duplicating it would mean two copies to keep in sync. Calling the routes over HTTP would need a running server and a logged in user for tools that do not need either.
+
+## Tool functions kept as plain functions
+
+Choice: the functions in mcp_server/tools.py are plain Python functions. server.py registers them as MCP tools, but the functions themselves know nothing about MCP.
+Alternative: write the tools with MCP decorators and types throughout, or put the logic in the server file.
+Why: Milestone 3 adds an agent loop that calls these tools in-process. Plain functions let the loop import and call them directly, with no MCP server running and no protocol overhead. Keeping them separate from server.py also keeps the transport and the tool logic independent, so either can change on its own.
+
+## research_company uses the Wikipedia summary API
+
+Choice: research_company fetches the company summary from the Wikipedia REST summary API (en.wikipedia.org/api/rest_v1/page/summary/{name}) with a plain urllib request and a User-Agent header. No API key, account, or paid plan.
+Alternative: a paid company data API such as Crunchbase or Clearbit, scraping the company's own website, the Wikipedia action API, or a general web search API.
+Why: the summary API needs no key, so there is no secret to store and no quota or billing to manage. It returns a short factual extract plus the canonical page URL, which is all the agent needs for background context on a company. Scraping company sites is fragile because every site is structured differently, and paid APIs add cost and credentials for information that is public. The summary is background context only, not a source for claims in the tailored resume, so a short encyclopedia extract is enough. The trade off is coverage: a company with no Wikipedia page returns an error, and the agent works around that instead of getting a summary.
+
+## Database tools run inside a Flask app context
+
+Choice: read_resume and get_past_applications check has_app_context first. When a context is active they reuse it; otherwise they build an app with the factory and push a context around the query.
+Alternative: require the caller to pass in an app or a context, open a raw SQLAlchemy session outside Flask, or create one global app at import time.
+Why: the MCP server runs standalone over stdio with no request, so there is no app context unless the tool makes one. Reusing an active context keeps tests on the test database and lets the Milestone 3 agent loop call the functions in-process inside its own context. A global app at import time would bind the server to one config and make tests leak state. A raw session would bypass the Flask-SQLAlchemy session and the app's configuration. Building the app through the factory keeps one way of making an app, in tests and in production.
+
+## Resume text comes from TailorResult.original_resume
+
+Choice: read_resume returns the original_resume column of the user's newest TailorResult row.
+Alternative: add a dedicated resumes table, read the uploaded resume file, or return the tailored_resume column.
+Why: the tailor results table is where the app already stores each resume a user submits, so there is no separate resume store and no new table or migration is needed for this milestone. original_resume holds the user's own words, while tailored_resume is generated output and must not be treated as the source resume. The agent grounds its claims in the resume the user wrote, so the tool returns that column from the newest result. When the user has never tailored a resume, nothing is stored and the tool returns an error instead of inventing a resume.
