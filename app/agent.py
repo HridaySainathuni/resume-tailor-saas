@@ -16,6 +16,7 @@ from app import create_app, db
 from app.models import TailorResult
 from app.services.keywords import score_resume
 from app.services.llm import TAILOR_MODEL, create_anthropic_client
+from app.verifier import verify_grounding
 from mcp_server.tools import (
     fetch_job_posting,
     get_past_applications,
@@ -307,7 +308,9 @@ def run_agent(job_url: str, user_id: int, client=None) -> dict:
 
     Returns:
         A dict with "tailored_resume", "cover_letter", "ats_score",
-        "result_id", "job_title", and "company".
+        "grounding_report", "result_id", "job_title", and "company".
+        The grounding report is the GroundingReport from checking
+        the tailored resume against the source resume, line by line.
 
     Raises:
         ValueError: When the job posting cannot be fetched, the
@@ -333,6 +336,7 @@ def run_agent(job_url: str, user_id: int, client=None) -> dict:
     job_title = job_posting.get("title") or ""
     company = job_posting.get("company") or ""
     ats_score = score_resume(tailored_resume, job_description)
+    grounding_report = verify_grounding(tailored_resume, resume)
     result_id = _save_tailor_result(
         user_id, job_title, company, resume, job_description, tailored_resume, cover_letter
     )
@@ -340,6 +344,7 @@ def run_agent(job_url: str, user_id: int, client=None) -> dict:
         "tailored_resume": tailored_resume,
         "cover_letter": cover_letter,
         "ats_score": ats_score,
+        "grounding_report": grounding_report,
         "result_id": result_id,
         "job_title": job_title,
         "company": company,

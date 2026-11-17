@@ -146,6 +146,41 @@ def test_run_agent_full_run_saves_tailor_result(app, user, fake_tools):
     assert saved.company == "Acme Corp"
 
 
+def test_run_agent_returns_grounding_report(app, user, fake_tools):
+    tailored = (
+        "Jane Doe, Python engineer.\n"
+        "Won a Nobel Prize in Physics"
+    )
+    client = FakeClient(
+        [FakeResponse([FakeTextBlock(_deliverables_reply(resume=tailored))])]
+    )
+
+    result = run_agent("https://example.com/jobs/1", user.id, client=client)
+
+    report = result["grounding_report"]
+    assert report.grounding_rate == 0.5
+    assert len(report.lines) == 2
+    assert report.lines[0].verdict == "grounded"
+    assert report.lines[0].match == "exact"
+    assert report.lines[1].verdict == "unsupported"
+    assert report.lines[1].match is None
+
+
+def test_run_agent_all_fabricated_lines_grounding_rate_zero(app, user, fake_tools):
+    tailored = (
+        "Led a team of 40 engineers at Google for five years\n"
+        "Won a Nobel Prize in Physics"
+    )
+    client = FakeClient(
+        [FakeResponse([FakeTextBlock(_deliverables_reply(resume=tailored))])]
+    )
+
+    result = run_agent("https://example.com/jobs/1", user.id, client=client)
+
+    assert result["grounding_report"].grounding_rate == 0.0
+    assert all(line.verdict == "unsupported" for line in result["grounding_report"].lines)
+
+
 def test_run_agent_job_fetch_failure_saves_nothing(app, user, fake_tools, monkeypatch):
     monkeypatch.setattr(
         "app.agent.fetch_job_posting", lambda url: {"error": "Could not fetch URL."}
