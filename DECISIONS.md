@@ -163,3 +163,21 @@ Why: the single-call path already returns an ATS score, so the loop should carry
 Choice: when the job posting cannot be fetched or the resume cannot be read, run_agent raises ValueError before any model call, and nothing is saved. A model reply without usable deliverables also raises before saving.
 Alternative: save a partial TailorResult with what was gathered, retry the fetch silently, or return empty deliverables.
 Why: a saved row is history the user can revisit. A row with no real posting or no resume would be misleading, and a row with empty deliverables is worse than no row. Raising surfaces the failure to the caller, which can report it honestly, instead of hiding it behind a saved record. Retrying silently would mask a bad URL or a missing resume that the user needs to fix.
+
+## Verifier checks exact match first, then a normalized fuzzy match
+
+Choice: verify_grounding in app/verifier.py checks each line of the tailored resume against the source resume in two steps. First it normalizes both lines (lowercase, punctuation stripped, whitespace collapsed) and checks for equality. If that fails, it compares the normalized lines with difflib SequenceMatcher and counts the line grounded when the similarity ratio is at least 0.8. A line that passes neither step is unsupported.
+Alternative: exact string match only, a single similarity score with no exact step, or an LLM based check that asks a model whether each line is supported.
+Why: exact match alone would flag every reworded line, and tailoring rewrites lines on purpose. A fuzzy check alone would spend a similarity comparison on lines that are copied verbatim, and the exact step makes the common case cheap and unambiguous. The normalized comparison ignores case, punctuation, and spacing, so formatting changes do not count as new content. An LLM based check would cost a model call per resume and could itself invent a judgement; a deterministic text comparison is fast, free, and reproducible. The 0.8 threshold is a starting point: high enough that a line with a changed fact usually falls below it, low enough that ordinary rewording passes.
+
+## Grounding rate as the summary measure
+
+Choice: GroundingReport exposes a grounding_rate property: the share of checked lines with a grounded verdict, 0.0 for an empty report. The report itself keeps every per-line verdict.
+Alternative: report only a pass or fail for the whole resume, report a count of unsupported lines with no rate, or store the rate as a field set at check time.
+Why: a single rate is easy to compare across runs and to show in a summary, and it stays meaningful as resumes grow or shrink, where a raw count does not. The per-line verdicts stay in the report because a rate alone does not say which lines to fix. A property computed from the verdicts keeps the rate and the lines in agreement by construction, instead of storing two values that could drift apart.
+
+## Verifier wired into run_agent without changing what the loop writes or saves
+
+Choice: run_agent calls verify_grounding on the tailored resume against the source resume after the loop finishes, and returns the GroundingReport in its result dict under "grounding_report". The TailorResult row it saves is unchanged: same columns, same values, no new column for the report.
+Alternative: save the report or the rate on the TailorResult row, have the verifier run before saving and block the save on a low rate, or run the check in a separate route instead of the loop.
+Why: the verifier is a report, not a gate. Blocking the save on a low rate would discard a resume the user may still want to see and fix, and a rate threshold is a product decision this milestone does not make. Adding a column would need a migration for a value the caller can already compute from the saved texts. Returning the report from run_agent gives the caller the full detail without changing the saved history, and keeping the write path untouched means the existing save behaviour and its tests stay valid.
