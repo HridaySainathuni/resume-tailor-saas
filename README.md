@@ -9,6 +9,7 @@ You paste in your resume and a job description. The app reorders and rewords you
 - Resume tailoring: rewrites your resume for one job description, prioritizing the most relevant experience and using the posting's language where it fits.
 - Cover letter generation: writes a cover letter from your resume and the job description, ready to send with no placeholders.
 - Keyword match score: compares the most frequent keywords in the job description against your resume and lists what matches and what is missing.
+- Grounding check: checks every line of the tailored resume against your original resume and reports which lines are grounded and which are not.
 - Import from URL: pulls the text of a job posting from a link so you do not have to copy and paste it.
 - Export: downloads the tailored resume as PDF or Word, and the cover letter as PDF.
 - History: saves past tailoring results so you can come back to them.
@@ -101,6 +102,22 @@ If the job posting cannot be fetched or the resume cannot be read, the loop rais
 
 The old single-call path in `app/services/llm.py` and the `/api/tailor` route is unchanged. The agent loop is a separate entry point that reuses the same services and tools.
 
+## Grounding verifier
+
+The grounding verifier lives in `app/verifier.py` and checks a tailored resume against the source resume, line by line, to catch anything the model added that was not there.
+
+`verify_grounding(tailored_text, resume_text)` returns a `GroundingReport` with one verdict per non-blank line of the tailored resume:
+
+| Verdict | Match | Meaning |
+| --- | --- | --- |
+| grounded | exact | The line matches a line of the source resume after normalizing case, punctuation, and whitespace |
+| grounded | fuzzy | The line does not match exactly, but closely resembles a source line (similarity ratio of at least 0.8) |
+| unsupported | none | The line matches no source line, exactly or closely |
+
+The report also exposes `grounding_rate`, the share of checked lines with a grounded verdict (0.0 when there are no lines). Blank lines are skipped and are not counted.
+
+The agent loop runs the verifier on every finished run: `run_agent` calls `verify_grounding` on the tailored resume against the source resume and returns the report in its result dict under `"grounding_report"`, alongside the tailored resume, cover letter, ATS score, and result id. The verifier does not change what the loop writes or saves: the tailored resume and cover letter are saved as before, and the report is returned to the caller for review.
+
 ## API endpoints
 
 | Method | Path | Description |
@@ -188,5 +205,4 @@ The repo includes a render.yaml that sets up a Docker web service and a Postgres
 
 ## Next steps
 
-- Add a check that compares the output against the original resume to catch anything the model added that was not there.
 - Use past applications as context so later results improve.
