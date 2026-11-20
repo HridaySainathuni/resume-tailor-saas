@@ -6,6 +6,7 @@ and reports fabrication rate and keyword coverage per pair. The
 fixtures used with this harness are synthetic and exist only to
 exercise it; the real eval dataset is a later slice.
 """
+import math
 import os
 from dataclasses import dataclass, field
 
@@ -111,6 +112,87 @@ def _score(approach: str, tailored_resume: str, pair: EvalPair) -> ApproachResul
         fabrication_rate=fabrication_rate(tailored_resume, pair.resume),
         keyword_coverage=keyword_coverage(tailored_resume, pair.job_description),
     )
+
+
+@dataclass
+class MetricSummary:
+    """One metric's mean across pairs with its Wilson interval."""
+
+    mean: float
+    low: float
+    high: float
+
+
+@dataclass
+class ApproachSummary:
+    """One approach's aggregated fabrication and coverage summaries."""
+
+    approach: str
+    fabrication_rate: MetricSummary
+    keyword_coverage: MetricSummary
+
+
+Z_95 = 1.96
+
+
+def wilson_interval(proportion: float, n: int, z: float = Z_95) -> tuple[float, float]:
+    """Wilson score interval for a proportion at the given confidence.
+
+    Args:
+        proportion: The observed proportion, between 0 and 1.
+        n: The number of observations behind the proportion.
+        z: The normal quantile for the confidence level (1.96 for 95%).
+
+    Returns:
+        A (low, high) pair clipped to [0, 1].
+    """
+    if n <= 0:
+        raise ValueError("n must be positive")
+    if not 0.0 <= proportion <= 1.0:
+        raise ValueError("proportion must be between 0 and 1")
+    z_squared = z * z
+    denominator = 1 + z_squared / n
+    center = (proportion + z_squared / (2 * n)) / denominator
+    half_width = (
+        z * math.sqrt(proportion * (1 - proportion) / n + z_squared / (4 * n * n))
+    ) / denominator
+    return (max(0.0, center - half_width), min(1.0, center + half_width))
+
+
+def _summarize(values: list[float]) -> MetricSummary:
+    """Mean of per-pair values with a Wilson interval over the pairs."""
+    mean = sum(values) / len(values)
+    low, high = wilson_interval(mean, len(values))
+    return MetricSummary(mean=mean, low=low, high=high)
+
+
+def aggregate_results(pair_results: list[PairResult]) -> dict[str, ApproachSummary]:
+    """Aggregate per-pair results into a summary per approach.
+
+    For each of the three approaches, returns the mean fabrication rate
+    and mean keyword coverage across the pairs, each with a Wilson
+    score interval at 95 percent confidence. The interval treats the
+    number of pairs as the sample size, so it tightens as more pairs
+    agree.
+
+    Args:
+        pair_results: The per-pair results from run_eval.
+
+    Returns:
+        One ApproachSummary per approach, keyed by approach name.
+    """
+    if not pair_results:
+        raise ValueError("at least one pair result is required")
+    summaries = {}
+    for approach in APPROACHES:
+        fabrication = [r.results[approach].fabrication_rate for r in pair_results]
+        coverage = [r.results[approach].keyword_coverage for r in pair_results]
+        summaries[approach] = ApproachSummary(
+            approach=approach,
+            fabrication_rate=_summarize(fabrication),
+            keyword_coverage=_summarize(coverage),
+        )
+    return summaries
 
 
 def run_eval(pairs: list[EvalPair], client=None) -> list[PairResult]:

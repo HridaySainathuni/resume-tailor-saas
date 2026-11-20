@@ -13,9 +13,13 @@ from app.evals import (
     AGENT,
     AGENT_WITH_VERIFIER,
     BASELINE,
+    ApproachResult,
     EvalPair,
+    PairResult,
+    aggregate_results,
     fabrication_rate,
     run_eval,
+    wilson_interval,
 )
 
 # Synthetic fixture pair 1: clean tailoring. Both approaches reuse
@@ -206,3 +210,98 @@ def test_run_eval_reports_keyword_coverage(fake_tools, fake_client):
 
 def test_fabrication_rate_empty_tailored_resume_is_zero():
     assert fabrication_rate("", PAIR_CLEAN.resume) == 0.0
+
+
+def _pair_result(fabrication: float, coverage: float) -> PairResult:
+    """A PairResult with the same rates for all three approaches."""
+    pair = EvalPair(resume="Jane Doe, Python engineer.", job_description="Python")
+    result = PairResult(pair=pair)
+    for approach in (BASELINE, AGENT, AGENT_WITH_VERIFIER):
+        result.results[approach] = ApproachResult(
+            approach=approach,
+            tailored_resume="",
+            fabrication_rate=fabrication,
+            keyword_coverage=coverage,
+        )
+    return result
+
+
+def test_aggregate_results_mean_between_pair_values(fake_tools, fake_client):
+    pair_results = run_eval([PAIR_CLEAN, PAIR_FABRICATING], client=fake_client)
+    summaries = aggregate_results(pair_results)
+
+    assert set(summaries) == {BASELINE, AGENT, AGENT_WITH_VERIFIER}
+    for approach in (BASELINE, AGENT, AGENT_WITH_VERIFIER):
+        pair_values = [
+            r.results[approach].fabrication_rate for r in pair_results
+        ]
+        assert min(pair_values) <= summaries[approach].fabrication_rate.mean
+        assert summaries[approach].fabrication_rate.mean <= max(pair_values)
+        pair_coverage = [
+            r.results[approach].keyword_coverage for r in pair_results
+        ]
+        assert min(pair_coverage) <= summaries[approach].keyword_coverage.mean
+        assert summaries[approach].keyword_coverage.mean <= max(pair_coverage)
+
+
+def test_aggregate_results_interval_contains_mean_and_stays_in_range(
+    fake_tools, fake_client
+):
+    pair_results = run_eval([PAIR_CLEAN, PAIR_FABRICATING], client=fake_client)
+    summaries = aggregate_results(pair_results)
+
+    for summary in summaries.values():
+        for metric in (summary.fabrication_rate, summary.keyword_coverage):
+            assert 0.0 <= metric.low <= metric.mean <= metric.high <= 1.0
+
+
+def test_aggregate_results_identical_rates_narrow_the_interval():
+    """Two pairs with identical rates give a tighter interval than one."""
+    single = aggregate_results([_pair_result(0.25, 0.5)])
+    double = aggregate_results([_pair_result(0.25, 0.5), _pair_result(0.25, 0.5)])
+
+    for approach in (BASELINE, AGENT, AGENT_WITH_VERIFIER):
+        assert double[approach].fabrication_rate.mean == 0.25
+        assert double[approach].keyword_coverage.mean == 0.5
+        single_width = (
+            single[approach].fabrication_rate.high - single[approach].fabrication_rate.low
+        )
+        double_width = (
+            double[approach].fabrication_rate.high - double[approach].fabrication_rate.low
+        )
+        assert double_width < single_width
+        single_cov_width = (
+            single[approach].keyword_coverage.high - single[approach].keyword_coverage.low
+        )
+        double_cov_width = (
+            double[approach].keyword_coverage.high - double[approach].keyword_coverage.low
+        )
+        assert double_cov_width < single_cov_width
+
+
+def test_aggregate_results_single_pair_returns_valid_interval():
+    summaries = aggregate_results([_pair_result(0.25, 0.5)])
+
+    for summary in summaries.values():
+        for metric in (summary.fabrication_rate, summary.keyword_coverage):
+            assert 0.0 <= metric.low <= metric.mean <= metric.high <= 1.0
+
+
+def test_wilson_interval_known_values():
+    # 95% Wilson interval for 5 successes out of 10 is about (0.24, 0.76).
+    low, high = wilson_interval(0.5, 10)
+    assert low == pytest.approx(0.2366, abs=0.001)
+    assert high == pytest.approx(0.7634, abs=0.001)
+    # Zero successes still gives a valid interval starting at 0.
+    low, high = wilson_interval(0.0, 10)
+    assert low == 0.0
+    assert 0.0 < high < 1.0
+    # Larger samples give narrower intervals.
+    _, high_small = wilson_interval(0.5, 10)
+    low_large, high_large = wilson_interval(0.5, 100)
+    assert high_large - low_large < high_small - low
+
+
+def test_aggregate_results_requires_at_least_one_pair():
+    with pytest.raises(ValueError):
+        aggregate_results([])
