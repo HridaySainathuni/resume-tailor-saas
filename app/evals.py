@@ -2,9 +2,9 @@
 
 Runs the three tailoring approaches (single-call baseline, agent loop,
 agent loop with the grounding verifier) over resume/job fixture pairs
-and reports fabrication rate and keyword coverage per pair. The
-fixtures used with this harness are synthetic and exist only to
-exercise it; the real eval dataset is a later slice.
+and reports fabrication rate, keyword coverage, and judge relevance
+per pair. The fixtures used with this harness are synthetic and exist
+only to exercise it; the real eval dataset is a later slice.
 """
 import math
 import os
@@ -12,7 +12,11 @@ from dataclasses import dataclass, field
 
 from app.agent import run_agent
 from app.services.keywords import score_resume
-from app.services.llm import create_anthropic_client, tailor_resume_text
+from app.services.llm import (
+    TAILOR_MODEL,
+    create_anthropic_client,
+    tailor_resume_text,
+)
 from app.verifier import verify_grounding
 
 BASELINE = "baseline"
@@ -22,6 +26,10 @@ AGENT_WITH_VERIFIER = "agent_with_verifier"
 APPROACHES = (BASELINE, AGENT, AGENT_WITH_VERIFIER)
 
 DEFAULT_JOB_URL = "https://example.com/jobs/eval"
+
+JUDGE_MAX_TOKENS = 20
+
+JUDGE_SYSTEM_PROMPT = """You are a hiring screener judging whether a tailored resume is relevant to a job description. Reply with exactly one word: RELEVANT if the resume's experience matches the role, NOT_RELEVANT if it does not. Reply with the single word only, no explanation."""
 
 
 @dataclass
@@ -48,6 +56,7 @@ class ApproachResult:
     tailored_resume: str
     fabrication_rate: float
     keyword_coverage: float
+    relevant: bool = False
 
 
 @dataclass
@@ -56,6 +65,43 @@ class PairResult:
 
     pair: EvalPair
     results: dict[str, ApproachResult] = field(default_factory=dict)
+
+
+def build_judge_prompt(tailored_resume: str, job_description: str) -> str:
+    return f"""Here is the tailored resume:
+
+---
+{tailored_resume}
+---
+
+Here is the job description:
+
+---
+{job_description}
+---
+
+Is this resume relevant to this job? Reply with exactly one word: RELEVANT or NOT_RELEVANT."""
+
+
+def judge_relevance(client, tailored_resume: str, job_description: str) -> bool:
+    """Ask the model whether a tailored resume fits the job.
+
+    Returns True when the model's verdict is RELEVANT. Any other
+    verdict, including NOT_RELEVANT and anything unparsable, counts
+    as not relevant, so a confusing reply never inflates the score.
+    """
+    message = client.messages.create(
+        model=TAILOR_MODEL,
+        max_tokens=JUDGE_MAX_TOKENS,
+        system=JUDGE_SYSTEM_PROMPT,
+        messages=[
+            {"role": "user", "content": build_judge_prompt(tailored_resume, job_description)}
+        ],
+    )
+    verdict = message.content[0].text.strip().upper().replace(" ", "").replace("_", "")
+    if verdict.startswith("NOTRELEVANT"):
+        return False
+    return verdict.startswith("RELEVANT")
 
 
 def fabrication_rate(tailored_resume: str, source_resume: str) -> float:
@@ -104,13 +150,14 @@ def _run_agent_with_verifier(pair: EvalPair, client) -> str:
     return "\n".join(grounded)
 
 
-def _score(approach: str, tailored_resume: str, pair: EvalPair) -> ApproachResult:
-    """Score one tailored resume for fabrication and keyword coverage."""
+def _score(approach: str, tailored_resume: str, pair: EvalPair, client) -> ApproachResult:
+    """Score one tailored resume for fabrication, coverage, and relevance."""
     return ApproachResult(
         approach=approach,
         tailored_resume=tailored_resume,
         fabrication_rate=fabrication_rate(tailored_resume, pair.resume),
         keyword_coverage=keyword_coverage(tailored_resume, pair.job_description),
+        relevant=judge_relevance(client, tailored_resume, pair.job_description),
     )
 
 
@@ -125,11 +172,12 @@ class MetricSummary:
 
 @dataclass
 class ApproachSummary:
-    """One approach's aggregated fabrication and coverage summaries."""
+    """One approach's aggregated fabrication, coverage, and relevance summaries."""
 
     approach: str
     fabrication_rate: MetricSummary
     keyword_coverage: MetricSummary
+    relevance_share: MetricSummary
 
 
 Z_95 = 1.96
@@ -169,11 +217,11 @@ def _summarize(values: list[float]) -> MetricSummary:
 def aggregate_results(pair_results: list[PairResult]) -> dict[str, ApproachSummary]:
     """Aggregate per-pair results into a summary per approach.
 
-    For each of the three approaches, returns the mean fabrication rate
-    and mean keyword coverage across the pairs, each with a Wilson
-    score interval at 95 percent confidence. The interval treats the
-    number of pairs as the sample size, so it tightens as more pairs
-    agree.
+    For each of the three approaches, returns the mean fabrication rate,
+    mean keyword coverage, and share of pairs judged relevant across
+    the pairs, each with a Wilson score interval at 95 percent
+    confidence. The interval treats the number of pairs as the sample
+    size, so it tightens as more pairs agree.
 
     Args:
         pair_results: The per-pair results from run_eval.
@@ -187,10 +235,14 @@ def aggregate_results(pair_results: list[PairResult]) -> dict[str, ApproachSumma
     for approach in APPROACHES:
         fabrication = [r.results[approach].fabrication_rate for r in pair_results]
         coverage = [r.results[approach].keyword_coverage for r in pair_results]
+        relevance = [
+            1.0 if r.results[approach].relevant else 0.0 for r in pair_results
+        ]
         summaries[approach] = ApproachSummary(
             approach=approach,
             fabrication_rate=_summarize(fabrication),
             keyword_coverage=_summarize(coverage),
+            relevance_share=_summarize(relevance),
         )
     return summaries
 
@@ -220,6 +272,6 @@ def run_eval(pairs: list[EvalPair], client=None) -> list[PairResult]:
         pair_result = PairResult(pair=pair)
         for approach in APPROACHES:
             tailored = runners[approach](pair, client)
-            pair_result.results[approach] = _score(approach, tailored, pair)
+            pair_result.results[approach] = _score(approach, tailored, pair, client)
         results.append(pair_result)
     return results

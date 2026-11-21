@@ -18,6 +18,7 @@ from app.evals import (
     PairResult,
     aggregate_results,
     fabrication_rate,
+    judge_relevance,
     run_eval,
     wilson_interval,
 )
@@ -155,16 +156,25 @@ def fake_tools(monkeypatch):
 def fake_client():
     """Canned model replies in the order run_eval calls for them.
 
-    Per pair: baseline, then agent, then agent with verifier.
+    Per pair: baseline tailor, judge, agent, judge, agent with
+    verifier, judge. Every tailored resume in the fixtures is
+    relevant to its job, so every judge reply is RELEVANT.
     """
+    relevant = FakeResponse([FakeTextBlock("RELEVANT")])
     return FakeClient(
         [
             FakeResponse([FakeTextBlock(CLEAN_BASELINE)]),
+            relevant,
             FakeResponse([FakeTextBlock(_deliverables_reply(CLEAN_AGENT))]),
+            relevant,
             FakeResponse([FakeTextBlock(_deliverables_reply(CLEAN_AGENT))]),
+            relevant,
             FakeResponse([FakeTextBlock(FABRICATING_BASELINE)]),
+            relevant,
             FakeResponse([FakeTextBlock(_deliverables_reply(FABRICATING_AGENT))]),
+            relevant,
             FakeResponse([FakeTextBlock(_deliverables_reply(FABRICATING_AGENT))]),
+            relevant,
         ]
     )
 
@@ -208,11 +218,44 @@ def test_run_eval_reports_keyword_coverage(fake_tools, fake_client):
     assert fabricating[AGENT].keyword_coverage > fabricating[BASELINE].keyword_coverage
 
 
+def test_judge_relevance_returns_verdict_for_a_pair():
+    client = FakeClient([FakeResponse([FakeTextBlock("RELEVANT")])])
+
+    assert judge_relevance(client, CLEAN_AGENT, PAIR_CLEAN.job_description) is True
+
+
+def test_judge_relevance_negative_verdict_for_irrelevant_resume():
+    client = FakeClient([FakeResponse([FakeTextBlock("NOT_RELEVANT")])])
+    off_topic_resume = (
+        "Jane Doe, pastry chef.\n"
+        "Baked croissants for a Paris bakery.\n"
+        "Ran a catering team of six."
+    )
+
+    assert judge_relevance(client, off_topic_resume, PAIR_CLEAN.job_description) is False
+
+
+def test_judge_relevance_unparsable_verdict_is_not_relevant():
+    client = FakeClient([FakeResponse([FakeTextBlock("It looks pretty good.")])])
+
+    assert judge_relevance(client, CLEAN_AGENT, PAIR_CLEAN.job_description) is False
+
+
+def test_run_eval_includes_relevance_verdicts(fake_tools, fake_client):
+    results = run_eval([PAIR_CLEAN, PAIR_FABRICATING], client=fake_client)
+
+    for result in results:
+        for approach_result in result.results.values():
+            assert approach_result.relevant is True
+
+
 def test_fabrication_rate_empty_tailored_resume_is_zero():
     assert fabrication_rate("", PAIR_CLEAN.resume) == 0.0
 
 
-def _pair_result(fabrication: float, coverage: float) -> PairResult:
+def _pair_result(
+    fabrication: float, coverage: float, relevant: bool = True
+) -> PairResult:
     """A PairResult with the same rates for all three approaches."""
     pair = EvalPair(resume="Jane Doe, Python engineer.", job_description="Python")
     result = PairResult(pair=pair)
@@ -222,8 +265,29 @@ def _pair_result(fabrication: float, coverage: float) -> PairResult:
             tailored_resume="",
             fabrication_rate=fabrication,
             keyword_coverage=coverage,
+            relevant=relevant,
         )
     return result
+
+
+def test_aggregate_results_reports_relevance_share_per_approach():
+    pair_results = [
+        _pair_result(0.0, 1.0, relevant=True),
+        _pair_result(0.0, 1.0, relevant=False),
+    ]
+    summaries = aggregate_results(pair_results)
+
+    for summary in summaries.values():
+        assert summary.relevance_share.mean == pytest.approx(0.5)
+        assert 0.0 <= summary.relevance_share.low <= summary.relevance_share.mean
+        assert summary.relevance_share.mean <= summary.relevance_share.high <= 1.0
+
+
+def test_aggregate_results_all_relevant_pairs_share_is_one():
+    summaries = aggregate_results([_pair_result(0.0, 1.0, relevant=True)])
+
+    for summary in summaries.values():
+        assert summary.relevance_share.mean == 1.0
 
 
 def test_aggregate_results_mean_between_pair_values(fake_tools, fake_client):
