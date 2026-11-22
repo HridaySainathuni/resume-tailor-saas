@@ -19,6 +19,9 @@ def create_app(config_class=Config, config_overrides=None):
         app.config.update(config_overrides)
     if not app.config.get("TESTING"):
         config_class.validate()
+        from app.tracing import configure_tracing
+
+        configure_tracing()
 
     db.init_app(app)
     login_manager.init_app(app)

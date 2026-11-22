@@ -16,6 +16,7 @@ from app import create_app, db
 from app.models import TailorResult
 from app.services.keywords import score_resume
 from app.services.llm import TAILOR_MODEL, create_anthropic_client
+from app.tracing import get_tracer
 from app.verifier import verify_grounding
 from mcp_server.tools import (
     fetch_job_posting,
@@ -23,6 +24,8 @@ from mcp_server.tools import (
     read_resume,
     research_company,
 )
+
+tracer = get_tracer()
 
 AGENT_MAX_TOKENS = 4000
 MAX_TOOL_TURNS = 10
@@ -254,7 +257,16 @@ def _run_loop(client, messages: list) -> str:
         messages.append({"role": "assistant", "content": _content_to_dicts(response.content)})
         tool_results = []
         for block in tool_uses:
-            result = _call_tool(block.name, block.input or {})
+            with tracer.start_as_current_span(f"tool.{block.name}") as span:
+                span.set_attribute("tool.name", block.name)
+                try:
+                    result = _call_tool(block.name, block.input or {})
+                except Exception as exc:
+                    span.set_attribute("tool.success", False)
+                    span.record_exception(exc)
+                    raise
+                failed = isinstance(result, dict) and bool(result.get("error"))
+                span.set_attribute("tool.success", not failed)
             content = result if isinstance(result, str) else json.dumps(result)
             tool_results.append(
                 {"type": "tool_result", "tool_use_id": block.id, "content": content}
@@ -291,7 +303,7 @@ def _save_tailor_result(user_id, job_title, company, original_resume, job_descri
         return result.id
 
 
-def run_agent(job_url: str, user_id: int, client=None) -> dict:
+def _run_agent(job_url: str, user_id: int, client=None) -> dict:
     """Run the agent loop for one job application and save the deliverables.
 
     Gathers context, then drives the Anthropic tool-calling loop
@@ -349,3 +361,14 @@ def run_agent(job_url: str, user_id: int, client=None) -> dict:
         "job_title": job_title,
         "company": company,
     }
+
+
+def run_agent(job_url: str, user_id: int, client=None) -> dict:
+    """Run the agent loop for one job application and save the deliverables.
+
+    The whole run is traced as one "agent.run" span, with one
+    child span per tool call made inside the loop. See _run_agent
+    for the run itself.
+    """
+    with tracer.start_as_current_span("agent.run"):
+        return _run_agent(job_url, user_id, client=client)
