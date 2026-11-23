@@ -118,6 +118,20 @@ The report also exposes `grounding_rate`, the share of checked lines with a grou
 
 The agent loop runs the verifier on every finished run: `run_agent` calls `verify_grounding` on the tailored resume against the source resume and returns the report in its result dict under `"grounding_report"`, alongside the tailored resume, cover letter, ATS score, and result id. The verifier does not change what the loop writes or saves: the tailored resume and cover letter are saved as before, and the report is returned to the caller for review.
 
+## Eval suite
+
+The eval suite lives in `app/evals.py` and compares the three tailoring approaches on resume/job fixture pairs.
+
+`run_eval(pairs, client=None)` runs each pair through all three approaches, the single-call baseline, the agent loop, and the agent loop with the grounding verifier, and scores each tailored resume three ways:
+
+- **Fabrication rate**: the share of tailored lines the verifier finds unsupported by the source resume.
+- **Keyword coverage**: the share of the job description's top keywords present in the tailored resume, from the keyword scorer.
+- **Judge relevance**: a small LLM judge reads the tailored resume and the job description and returns a one-word verdict, RELEVANT or NOT_RELEVANT. A verdict the parser cannot read counts as not relevant.
+
+`aggregate_results(pair_results)` summarizes each approach across the pairs: the mean fabrication rate, mean keyword coverage, and share of relevant pairs, each with a Wilson score interval at 95 percent confidence. The interval treats the number of pairs as the sample size, so it tightens as more pairs agree.
+
+The fixture pairs are synthetic and exist only to exercise the harness. The real eval dataset is a later slice. Tests use a mocked Anthropic client, so the suite never calls a live API.
+
 ## API endpoints
 
 | Method | Path | Description |
