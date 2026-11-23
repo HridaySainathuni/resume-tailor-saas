@@ -30,6 +30,25 @@ def configure_tracing(exporter=None):
     _configured = True
 
 
+def attach_exporter(exporter):
+    """Attach another span exporter to the tracer provider.
+
+    When tracing is not configured yet, this configures it with
+    the given exporter. When it is already configured (for example
+    by a test module), the exporter is added as a second span
+    processor so its spans are captured too.
+
+    Args:
+        exporter: A span exporter, such as an InMemorySpanExporter.
+    """
+    global _configured
+    if not _configured:
+        configure_tracing(exporter=exporter)
+        return
+    provider = trace.get_tracer_provider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+
 def get_tracer(name="resume-tailor"):
     """Return a tracer for the given instrumentation name."""
     return trace.get_tracer(name)
