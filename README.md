@@ -64,6 +64,7 @@ app/
   static/         # CSS and JavaScript
 tests/            # pytest suite, mocked Anthropic and Stripe calls
 mcp_server/       # MCP server: tools the agent loop calls (see below)
+scripts/demo.py   # live demo: run the agent loop on sample data and print the trace
 run.py            # entry point
 Dockerfile
 render.yaml       # Render deployment config
@@ -131,6 +132,18 @@ The eval suite lives in `app/evals.py` and compares the three tailoring approach
 `aggregate_results(pair_results)` summarizes each approach across the pairs: the mean fabrication rate, mean keyword coverage, and share of relevant pairs, each with a Wilson score interval at 95 percent confidence. The interval treats the number of pairs as the sample size, so it tightens as more pairs agree.
 
 The fixture pairs are synthetic and exist only to exercise the harness. The real eval dataset is a later slice. Tests use a mocked Anthropic client, so the suite never calls a live API.
+
+## Tracing and live demo
+
+The agent loop is traced with OpenTelemetry (see `app/tracing.py`). Each run emits one `agent.run` span for the whole run, and one `tool.<name>` child span per tool call inside the loop. Each tool span carries `tool.name` and `tool.success` attributes, and records the exception when a tool call fails. Spans print to the console by default; tests pass an in-memory exporter to `configure_tracing` and inspect the finished spans directly.
+
+Run the live demo with:
+
+```bash
+python scripts/demo.py --fake
+```
+
+The demo runs `run_agent` end to end on a small sample job posting and a sample resume, using a fake model client and canned job posting and company data, so it needs no API key and makes no network calls. With a real Anthropic client instead, run `python scripts/demo.py` with `ANTHROPIC_API_KEY` set. The demo prints the tailored resume, the grounding report with the grounding rate and one verdict per line, and the trace spans the run emitted with their attributes.
 
 ## API endpoints
 
